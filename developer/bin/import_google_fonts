@@ -80,10 +80,7 @@ end
         if not self.desc:
           return None
 
-        if len(self.desc) == 0:
-          return None
-
-        return self.desc
+        return None if len(self.desc) == 0 else self.desc
 
     def token(self):
         # https://github.com/Homebrew/homebrew-cask-fonts/blob/master/CONTRIBUTING.md#converting-the-canonical-name-to-a-token
@@ -101,7 +98,7 @@ end
           return self.homepage_override
 
         if self.early_access:
-            return f"https://fonts.google.com/earlyaccess"
+            return "https://fonts.google.com/earlyaccess"
 
         return f"https://fonts.google.com/specimen/{self.name_path()}"
 
@@ -149,20 +146,20 @@ def metadata_to_cask(meta_file, repo_dir):
     description = None
 
     if os.path.exists(description_path):
-      with open(description_path) as f:
-        h2t = html2text.HTML2Text()
-        h2t.ignore_links = True
-        h2t.ignore_images = True
-        h2t.ignore_tables = True
-        h2t.ignore_emphasis = True
+        with open(description_path) as f:
+            h2t = html2text.HTML2Text()
+            h2t.ignore_links = True
+            h2t.ignore_images = True
+            h2t.ignore_tables = True
+            h2t.ignore_emphasis = True
 
-        contents = " ".join(h2t.handle(f.read()).replace('"', '').split())
+            contents = " ".join(h2t.handle(f.read()).replace('"', '').split())
 
-        regex = r".*" + re.escape(meta.name) + r"\s+(?:.*\s+)?is(?:\s+an?|the)?\s+"
-        parts = re.split(regex, contents, maxsplit=1)
+            regex = f".*{re.escape(meta.name)}" + r"\s+(?:.*\s+)?is(?:\s+an?|the)?\s+"
+            parts = re.split(regex, contents, maxsplit=1)
 
-        if len(parts) > 1:
-          description = parts[1].split(".")[0].capitalize()
+            if len(parts) > 1:
+              description = parts[1].split(".")[0].capitalize()
 
     return FontCask(folder, meta, description=description)
 
@@ -186,34 +183,33 @@ def write_cask(cask):
 
 
 def find_google_casks():
-  casks = {}
+    casks = {}
 
-  for cask_path in glob('Casks/*.rb'):
-    token = os.path.splitext(os.path.basename(cask_path))[0]
+    for cask_path in glob('Casks/*.rb'):
+        token = os.path.splitext(os.path.basename(cask_path))[0]
 
-    with open(cask_path, "r") as f:
-      contents = f.read()
+        with open(cask_path, "r") as f:
+            contents = f.read()
 
-      if not re.search(r"(github\.com\/google\/fonts|fonts\.google\.com|google\.com/fonts)", contents):
-        continue
+            if not re.search(r"(github\.com\/google\/fonts|fonts\.google\.com|google\.com/fonts)", contents):
+              continue
 
-      homepage = re.search(r"homepage\s+([\"'])(.*)(\1)\s*", contents)
-      if homepage:
-        homepage = homepage[2]
+            homepage = re.search(r"homepage\s+([\"'])(.*)(\1)\s*", contents)
+            if homepage:
+              homepage = homepage[2]
 
-      desc = re.search(r"desc\s+([\"'])(.*)(\1)\s*", contents)
-      if desc:
-        description = desc[2]
-      else:
-        description = None
+            if desc := re.search(r"desc\s+([\"'])(.*)(\1)\s*", contents):
+                description = desc[2]
+            else:
+                description = None
 
-    casks[token] = {
-      'path': cask_path,
-      'description': description,
-      'homepage': homepage,
-    }
+        casks[token] = {
+          'path': cask_path,
+          'description': description,
+          'homepage': homepage,
+        }
 
-  return casks
+    return casks
 
 def find_family_folders(repo_dir):
     SUBDIRS = ["apache", "ofl", "ufl"]
@@ -235,8 +231,7 @@ def derive_name(font_file):
     font_file = re.sub(r"-\w+$", "", font_file)
 
     name_parts = camel_case_split(font_file)
-    result = " ".join(name_parts)
-    return result
+    return " ".join(name_parts)
 
 
 def derive_metadata(family_folder):
@@ -305,31 +300,30 @@ Download the or clone the repository from https://github.com/google/fonts, then 
         if cask.token() in added_casks or cask.token() in updated_casks:
           continue
 
-        existing_cask = existing_casks.pop(cask.token(), None)
-        if existing_cask:
-          cask.desc = existing_cask['description']
+        if existing_cask := existing_casks.pop(cask.token(), None):
+            cask.desc = existing_cask['description']
 
-          # If font is unreleased, re-use previous homepage URL.
-          if cask.homepage() != existing_cask['homepage']:
+            # If font is unreleased, re-use previous homepage URL.
+            if cask.homepage() != existing_cask['homepage']:
+              try:
+                urllib.request.urlopen(cask.homepage())
+              except urllib.request.URLError as e:
+                if e.code == 404:
+                  cask.homepage_override = existing_cask['homepage']
+
+            updated_casks[cask.token()] = cask
+        else:
             try:
-              urllib.request.urlopen(cask.homepage())
+               urllib.request.urlopen(cask.homepage())
             except urllib.request.URLError as e:
               if e.code == 404:
-                cask.homepage_override = existing_cask['homepage']
+                cask.homepage_override = cask.meta.source.repository_url
 
-          updated_casks[cask.token()] = cask
-        else:
-          try:
-             urllib.request.urlopen(cask.homepage())
-          except urllib.request.URLError as e:
-            if e.code == 404:
-              cask.homepage_override = cask.meta.source.repository_url
-
-          added_casks[cask.token()] = cask
+            added_casks[cask.token()] = cask
 
     changed_casks = {}
 
-    print("Mode " + mode)
+    print(f"Mode {mode}")
 
     if not mode or mode == 'add':
       print("Adding added casks")
@@ -341,13 +335,13 @@ Download the or clone the repository from https://github.com/google/fonts, then 
       changed_casks |= updated_casks
 
     written_casks = 0
-    for token, cask in changed_casks.items():
-      if write_cask(cask):
-        written_casks += 1
+    for cask in changed_casks.values():
+        if write_cask(cask):
+          written_casks += 1
 
-      # Limit cask changes per PR.
-      if mode is not None and written_casks >= 50:
-        break
+        # Limit cask changes per PR.
+        if mode is not None and written_casks >= 50:
+          break
 
     if not mode or mode == 'delete':
       # Delete casks which don't exist anymore.
